@@ -43,6 +43,17 @@ propFromBool :: Bool -> Prop
 propFromBool True  = PTrue
 propFromBool False = PFalse 
 
+vars :: Prop -> Set Var
+vars = cata $ \case
+  PVarF s       -> Set.singleton s
+  PTrueF        -> Set.empty
+  PFalseF       -> Set.empty
+  PNegF p       -> p
+  PAndF p1 p2   -> p1 <> p2
+  POrF p1 p2    -> p1 <> p2
+  PImplF p1 p2  -> p1 <> p2
+  PEquivF p1 p2 -> p1 <> p2
+
 subst :: Var -> Bool -> Prop -> Prop
 subst var val = cata $ \case
   PVarF s       -> if var == s then propFromBool val else PVar s
