@@ -1,9 +1,11 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 
-import Data.Prop
+import Data.Prop hiding (sat)
+import qualified Data.Prop  as P (sat)
 import Data.Map (Map, (!))
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Bool (bool) 
 import Data.List (subsequences)
@@ -135,19 +137,36 @@ neg bdd@(BDD tMap iMap root) =
     i 1 = 0
     i n = n
 
-sat :: BDD -> [[Int]]
-sat bdd@(BDD {treeMap, invMap, root}) = sat' root (treeMap ! root) 1
+sat :: BDD -> Set (Set Var) 
+sat bdd@(BDD {treeMap, invMap, root}) = 
+  Set.fromList (map Set.fromList $ sat' root (treeMap ! root) 1)
   where
     Branch n _ _ = treeMap ! 0
     nNodes = n-1
 
     sat' 0 (Branch _ _ _) _ = []
     sat' 1 (Branch n _ _) i
-      | n > i+1 = subsequences [i..nNodes]
+      | n > i = subsequences [i..nNodes]
       | otherwise = [[]]
     sat' _ (Branch x l h) i 
       | x > i =
         [y ++ z | y <- subsequences [i..(x-1)], z <- sat' l (treeMap ! l) (x+1)] ++
         [y ++ (x:z) | y <- subsequences [i..(x-1)], z <- sat' h (treeMap ! h) (x+1)]
       | otherwise  = sat' l (treeMap ! l) (x+1) ++ [x:r | r <- sat' h (treeMap ! h) (x+1)]
+
+testSat :: Prop -> Bool
+testSat p = P.sat p == (sat $ build p)
+
+test1 = (PVar 1 `PImpl` (PVar 2 `PImpl` PVar 3)) `PImpl` 
+        (PVar 2 `PImpl` (PVar 1 `PImpl` PVar 3))
+test2 = ((PVar 1 `PAnd` PVar 2) `POr` (PVar 1 `PAnd` PVar 3)) `PImpl` 
+        (PVar 1 `PAnd` (PVar 2 `POr` PVar 3))
+test3 = (PVar 1 `PImpl` (PVar 2 `PImpl` PVar 3)) `PImpl` 
+        ((PVar 1 `PAnd` PVar 2) `PImpl` PVar 3)
+test4 = PVar 1 `PAnd` (PNeg $ PVar 1)
+test5 = (PVar 1 `POr` PVar 2) `PAnd` (PVar 3 `POr` PVar 4) `PAnd` (PVar 5 `POr` PVar 6)
+test5' = (PVar 1 `POr` PVar 4) `PAnd` (PVar 2 `POr` PVar 5) `PAnd` (PVar 3 `POr` PVar 6)
+
+main = do
+  print $ map testSat [test1, test2, test3, test4, test5, test5']
 

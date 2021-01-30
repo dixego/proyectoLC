@@ -75,3 +75,8 @@ eval = cata $ \case
   POrF p1 p2    -> p1 || p2
   PImplF p1 p2  -> (not p1) || p2
   PEquivF p1 p2 -> p1 == p2
+
+
+sat :: Prop -> Set (Set Var)
+sat p = Set.fromList 
+  [x | x <- Set.toList. Set.powerSet . Set.fromList $ [1..(maximum $ vars p)], evalProp x p == True]
