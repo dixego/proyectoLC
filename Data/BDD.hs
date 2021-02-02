@@ -1,6 +1,8 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 
+module Data.BDD (BDD(..), BDDNode(..), NodeRef, BoolOp, build, expr2bdd, apply, disj, conj, neg, sat, testSat) where
+
 import Data.Prop hiding (sat)
 import qualified Data.Prop  as P (sat)
 import Data.Map (Map, (!))
@@ -82,10 +84,9 @@ apply bdd1@(BDD _ _ r1) bdd2@(BDD _ _ r2) op = bdd
     n1 = countVars bdd1
     n2 = countVars bdd2 
     n  = max n1 n2
-    countVars (BDD bdd _ _ ) = maximum [i | (n, (Branch i _ _)) <- Map.toList bdd, not (elem n [1,0])]
-
+    countVars (BDD bdd _ _ ) = 
+      maximum [i | (n, (Branch i _ _)) <- Map.toList bdd, not (elem n [1,0])]
     initBDD = BDD (Map.fromList [(0, Branch (n+1) 0 0), (1, Branch (n+1) 1 1)]) Map.empty 0
-
     (bdd, _) = app bdd1 bdd2 op initBDD Map.empty
 
 type RefMap = Map (NodeRef, NodeRef) NodeRef
@@ -169,4 +170,3 @@ test5' = (PVar 1 `POr` PVar 4) `PAnd` (PVar 2 `POr` PVar 5) `PAnd` (PVar 3 `POr`
 
 main = do
   print $ map testSat [test1, test2, test3, test4, test5, test5']
-
