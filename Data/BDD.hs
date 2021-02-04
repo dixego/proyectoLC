@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE BangPatterns      #-}
 
 module Data.BDD (BDD(..), BDDNode(..), NodeRef, BoolOp, build, expr2bdd, apply, disj, conj, neg, sat, testSat) where
 
@@ -11,6 +12,10 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Bool (bool) 
 import Data.List (subsequences)
+
+import Debug.Trace
+
+debug x = trace (show x) x
 
 type BoolOp = Bool -> Bool -> Bool
 
@@ -70,9 +75,9 @@ subtree bdd@(BDD {treeMap, invMap, root}) i lo hi
   | lo == hi = bdd { root = lo }
   | Map.member (Branch i lo hi) invMap = bdd { root = invMap ! (Branch i lo hi) }
   | otherwise = 
-    let root'    = Map.size treeMap
-        treeMap' = Map.insert root' (Branch i lo hi) treeMap
-        invMap'  = Map.insert (Branch i lo hi) root' invMap
+    let !root'    = Map.size treeMap
+        !treeMap' = Map.insert root' (Branch i lo hi) treeMap
+        !invMap'  = Map.insert (Branch i lo hi) root' invMap
     in BDD treeMap' invMap' root'
 
 
@@ -85,7 +90,7 @@ apply bdd1@(BDD _ _ r1) bdd2@(BDD _ _ r2) op = bdd
     n2 = countVars bdd2 
     n  = max n1 n2
     countVars (BDD bdd _ _ ) = 
-      maximum [i | (n, (Branch i _ _)) <- Map.toList bdd, not (elem n [1,0])]
+      maximum $ 0:[i | (n, (Branch i _ _)) <- Map.toList bdd, not (elem n [1,0])]
     initBDD = BDD (Map.fromList [(0, Branch (n+1) 0 0), (1, Branch (n+1) 1 1)]) Map.empty 0
     (bdd, _) = app bdd1 bdd2 op initBDD Map.empty
 
@@ -97,18 +102,20 @@ app bdd1@(BDD tm1 im1 r1) bdd2@(BDD tm2 im2 r2) op result g =
   let (result', g')
         | Map.member (r1, r2) g = (result { root = g ! (r1, r2)}, g)
         | r1 < 2 && r2 < 2      = (result { root = evalOp r1 r2 op}, g)
+        | r1 < 2                = makeApply v2 r1 lo2 r1 hi2
+        | r2 < 2                = makeApply v1 lo1 r2 hi1 r2
         | v1 == v2              = makeApply v1 lo1 lo2 hi1 hi2
         | v1 < v2               = makeApply v1 lo1 r2 hi1 r2
-        | otherwise             = makeApply v2 r1 lo2 r1 hi2
+        | v2 < v1               = makeApply v2 r1 lo2 r1 hi2
    in (result', Map.insert (r1, r2) (root result') g')
   where 
     Branch v1 lo1 hi1 = tm1 ! r1
     Branch v2 lo2 hi2 = tm2 ! r2
 
     makeApply v l1 l2 h1 h2 =
-      let (r1, g1) = app bdd1{root=l1} bdd2{root=l2} op result g
-          (r2, g2) = app bdd1{root=h1} bdd2{root=h2} op r1 g1
-          r3 = subtree r2 v (root r1) (root r2)
+      let !(r1, g1) = app (bdd1{root=l1}) (bdd2{root=l2}) op result g
+          !(r2, g2) = app (bdd1{root=h1}) (bdd2{root=h2}) op r1 g1
+          !r3 = subtree r2 v (root r1) (root r2)
       in (r3, g2)
 
     evalOp a b op
@@ -157,16 +164,3 @@ sat bdd@(BDD {treeMap, invMap, root}) =
 
 testSat :: Prop -> Bool
 testSat p = P.sat p == (sat $ build p)
-
-test1 = (PVar 1 `PImpl` (PVar 2 `PImpl` PVar 3)) `PImpl` 
-        (PVar 2 `PImpl` (PVar 1 `PImpl` PVar 3))
-test2 = ((PVar 1 `PAnd` PVar 2) `POr` (PVar 1 `PAnd` PVar 3)) `PImpl` 
-        (PVar 1 `PAnd` (PVar 2 `POr` PVar 3))
-test3 = (PVar 1 `PImpl` (PVar 2 `PImpl` PVar 3)) `PImpl` 
-        ((PVar 1 `PAnd` PVar 2) `PImpl` PVar 3)
-test4 = PVar 1 `PAnd` (PNeg $ PVar 1)
-test5 = (PVar 1 `POr` PVar 2) `PAnd` (PVar 3 `POr` PVar 4) `PAnd` (PVar 5 `POr` PVar 6)
-test5' = (PVar 1 `POr` PVar 4) `PAnd` (PVar 2 `POr` PVar 5) `PAnd` (PVar 3 `POr` PVar 6)
-
-main = do
-  print $ map testSat [test1, test2, test3, test4, test5, test5']
